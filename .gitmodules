@@ -1,0 +1,6 @@
+[submodule "ffcodec"]
+	path = ffcodec
+	url = git@github.com:KOMI422/ffmpeg-codec-wrapper.git
+[submodule "flvcpp"]
+	path = flvcpp
+	url = git@github.com:KOMI422/flvcpp.git
