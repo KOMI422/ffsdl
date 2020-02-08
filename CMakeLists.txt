@@ -4,6 +4,9 @@ project(ffsdl)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 #add_definitions(-m64)
+add_compile_options(-std=c++11)
+add_compile_options(-pthread)
+add_compile_options(-Wl,--no-as-needed)
 
 aux_source_directory(./ SRC_LIST)
 aux_source_directory(./ffcodec SRC_LIST)

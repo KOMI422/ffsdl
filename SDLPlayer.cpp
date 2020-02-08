@@ -1,47 +1,22 @@
 #include "SDLPlayer.h"
 #include <cstring>
 
-int AudioThread::threadEntry(void* ptr)
-{
-    // ((AudioThread*)ptr)->run();
-    return 0;
-}
-
-AudioThread::AudioThread()
-{
-    m_pThread = NULL;
-    SDL_AtomicSet(&m_running, 0);
-}
-
-void AudioThread::start()
-{
-    if(m_pThread != NULL)
-        return;
-
-    SDL_AtomicSet(&m_running, 1);
-    m_pThread = SDL_CreateThread(AudioThread::threadEntry, "AudioThread", this);
-}
-
-void AudioThread::stop()
-{
-    SDL_AtomicSet(&m_running, 0);
-}
-
-void AudioThread::handleAudio(const std::string& pcmData, uint32_t sampleRate, uint32_t channels)
-{
-
-}
-
 int SDLPlayer::threadEntry(void *ptr)
 {
     ((SDLPlayer*)ptr)->run();
     return 0;
 }
 
+uint32_t SDLPlayer::onTimer(uint32_t interval, void* ptr)
+{
+    return ((SDLPlayer*)ptr)->run() ? interval : 0;
+}
+
 uint32_t SDLPlayer::SDLPlayer_EventType = 0;
 
 SDLPlayer::SDLPlayer(uint32_t w, uint32_t h, bool autoScale)
 {
+    SDL_Init(SDL_INIT_TIMER);
     m_pPlayerWnd = NULL;
     m_pPlayerRenderer = NULL;
     m_pPlayerTexture = NULL;
@@ -57,10 +32,11 @@ SDLPlayer::SDLPlayer(uint32_t w, uint32_t h, bool autoScale)
         m_pPlayerWnd, -1, 0
     );
 
-    m_pPlayerTexture = SDL_CreateTexture(
-        m_pPlayerRenderer, SDL_PIXELFORMAT_IYUV, 
-        SDL_TEXTUREACCESS_STREAMING, w, h
-    );
+    m_pPlayerTexture = NULL;
+    // m_pPlayerTexture = SDL_CreateTexture(
+    //     m_pPlayerRenderer, SDL_PIXELFORMAT_IYUV, 
+    //     SDL_TEXTUREACCESS_STREAMING, 1920, 1080
+    // );
 
     m_pRenderFrameMutex = SDL_CreateMutex();
 
@@ -97,78 +73,89 @@ void SDLPlayer::startPlay(const std::string& url)
     if(m_pThread)
         return;
     
+    m_isFlvStreamEnd = false;
     m_flvStream.openFile(url);
-    SDL_AtomicSet(&m_running, 1);
-    m_pThread = SDL_CreateThread(SDLPlayer::threadEntry, "Player_IO", this);
-}
-
-void SDLPlayer::stopPlay()
-{
-    if(!m_pThread)
-        return;
-
-    SDL_AtomicSet(&m_running, 0);
-    SDL_WaitThread(m_pThread, NULL);
-}
-
-void SDLPlayer::run()
-{
     VideoPlayback_cb cb = std::bind(&SDLPlayer::videoPlaybackCb, this, std::placeholders::_1);
     m_videoPlayback = m_mediaPlayer.startPlayVideo(cb);
 
     AudioPlayback_cb audCb = std::bind(&SDLPlayer::audioPlaybackCb, this, std::placeholders::_1);
     m_audioPlayback = m_mediaPlayer.startPlayAudio(audCb);
-    while(SDL_AtomicGet(&m_running) > 0)
+
+    SDL_AtomicSet(&m_running, 1);
+    m_timer = SDL_AddTimer(1, &SDLPlayer::onTimer, this);
+}
+
+void SDLPlayer::stopPlay()
+{
+    // if(!m_pThread)
+    //     return;
+
+    SDL_AtomicSet(&m_running, 0);
+    SDL_RemoveTimer(m_timer);
+
+    SDL_Delay(500);
+}
+
+bool SDLPlayer::run()
+{
+    if(!m_isFlvStreamEnd)
     {
         MediaFileStream::FrameType type;
         std::string frameHeader;
         std::string frameData;
         uint32_t dts = 0;
         uint32_t pts = 0;
-        if(!m_flvStream.readFrame(frameData, frameHeader, dts, pts, type))
+        int readRet = m_flvStream.readFrame(frameData, frameHeader, dts, pts, type);
+        if (readRet > 0)
         {
-            SDL_AtomicSet(&m_running, 0);
-            continue;
-        }
-
-        if(type == MediaFileStream::VIDEO)
-        {
-            //AVC End of Sequence
-            if(frameData.empty())
-                continue;
-            
-            if (frameHeader != m_videoHeader)
+            if (type == MediaFileStream::VIDEO)
             {
-                m_videoHeader = frameHeader;
+                //AVC End of Sequence
+                if (!frameData.empty())
+                {
+                    if (frameHeader != m_videoHeader)
+                    {
+                        m_videoHeader = frameHeader;
 
-                VideoPlaybackConfig cfg;
-                cfg.decodeHeader = m_videoHeader;
-                m_mediaPlayer.updateVideoPlayConfig(m_videoPlayback, cfg);
+                        VideoPlaybackConfig cfg;
+                        cfg.decodeHeader = m_videoHeader;
+                        m_mediaPlayer.updateVideoPlayConfig(m_videoPlayback, cfg);
+                    }
+
+                    VideoPlaybackPacket pkt;
+                    pkt.content = frameData;
+                    pkt.pts = pts;
+                    pkt.dts = dts;
+                    m_mediaPlayer.playVideo(m_videoPlayback, pkt);
+                }
             }
-
-            VideoPlaybackPacket pkt;
-            pkt.content = frameData;
-            pkt.pts = pts;
-            pkt.dts = dts;
-            m_mediaPlayer.playVideo(m_videoPlayback, pkt);
-        }
-        else if(type == MediaFileStream::AUDIO)
-        {
-            if(frameHeader != m_audioHeader)
+            else if (type == MediaFileStream::AUDIO)
             {
-                m_audioHeader = frameHeader;
-                
-                AudioPlaybackConfig cfg;
-                cfg.audioHeader = m_audioHeader;
-                m_mediaPlayer.updateAudioPlayConfig(m_audioPlayback, cfg);
-            }
+                if (frameHeader != m_audioHeader)
+                {
+                    m_audioHeader = frameHeader;
 
-            AudioPlaybackPacket pkt;
-            pkt.content = frameData;
-            pkt.dts = dts;
-            m_mediaPlayer.playAudio(m_audioPlayback, pkt);
+                    AudioPlaybackConfig cfg;
+                    cfg.audioHeader = m_audioHeader;
+                    m_mediaPlayer.updateAudioPlayConfig(m_audioPlayback, cfg);
+                }
+
+                AudioPlaybackPacket pkt;
+                pkt.content = frameData;
+                pkt.dts = dts;
+                m_mediaPlayer.playAudio(m_audioPlayback, pkt);
+            }
+        }
+        else if (readRet < 0)
+        {
+            m_isFlvStreamEnd = true;
+            m_mediaPlayer.flushMedia();
         }
     }
+
+    m_mediaPlayer.tickTrigger(SDL_GetTicks());
+
+    return SDL_AtomicGet(&m_running) > 0;
 }
 
 void SDLPlayer::renderVideo()
@@ -183,7 +170,14 @@ void SDLPlayer::renderVideo()
         void* pixels = NULL;
         int pitch = 0;
 
-        // SDL_Log("Render Frame pts=%u", pFrame->pts);
+        // SDL_Log("Render Frame pts=%u size=%u", pFrame->pts, toRenderFrames.size());
+
+        if(m_pPlayerTexture == NULL)
+        {
+            m_pPlayerTexture = SDL_CreateTexture(
+                m_pPlayerRenderer, SDL_PIXELFORMAT_IYUV,
+                SDL_TEXTUREACCESS_STREAMING, pFrame->width, pFrame->height);
+        }
 
         SDL_LockTexture(m_pPlayerTexture, NULL, &pixels, &pitch);
         memcpy(pixels, (const void*)pFrame->yuvContent.data(), pFrame->yuvContent.size());
@@ -202,6 +196,8 @@ void SDLPlayer::videoPlaybackCb(const std::vector<std::shared_ptr<VideoPlaybackF
     m_renderFrames.insert(m_renderFrames.end(), frameVec.begin(), frameVec.end());
     SDL_UnlockMutex(m_pRenderFrameMutex);
 
+    // SDL_Log("videoCb size=%u pts=%u tick=%u", 
+    //     m_renderFrames.size(), frameVec[0]->pts, SDL_GetTicks());
     SDL_Event renderEvent;
     SDL_zero(renderEvent);
     renderEvent.type = SDLPlayer_EventType;

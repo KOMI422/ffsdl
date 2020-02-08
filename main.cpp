@@ -15,14 +15,18 @@ int main(int argc, char* argv[])
     // testAudio();
     // return 0;
 
+    if(argc < 2)
+        return -1;
+
     SDL_SetMainReady();
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
 
     SDLPlayer::SDLPlayer_EventType = SDL_RegisterEvents(1);
 
-    SDLPlayer* pPlayer = new SDLPlayer(852,480);
+    SDLPlayer* pPlayer = new SDLPlayer(960,540);
     bool started = false;
 
+    uint64_t tickTime = 0;
     bool running = true;
     while(running)
     {
@@ -31,12 +35,12 @@ int main(int argc, char* argv[])
         {
             if(!started)
             {
-                pPlayer->startPlay("./dq11.flv");
+                pPlayer->startPlay(std::string(argv[1]));
                 started = true;
             }
             else
             {
-                pPlayer->tickTrigger(SDL_GetTicks());
+                // pPlayer->tickTrigger(SDL_GetTicks());
             }
         }
         else

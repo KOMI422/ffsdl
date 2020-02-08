@@ -36,12 +36,22 @@ typedef std::function<void(const std::vector<std::shared_ptr<AudioPlaybackFrame>
 class AudioPlayback
 {
 public:
+    static const uint32_t TICK_FLUSH;
+
+    enum PlaybackMode
+    {
+        TICK_MODE = 0,
+        FLUSH_MODE = 1
+    };
+public:
     AudioPlayback();
     
+    void setPlaybackMode(PlaybackMode mode) { m_playbackMode = mode; }
     bool setupPlayback(const AudioPlaybackConfig& cfg);
     void resetPlayback();
 
     void appendContent(const AudioPlaybackPacket& content);
+    void flushContent();
     void tickTrigger(uint32_t tickTime);
 
     void setPlaybackCallback(AudioPlayback_cb cb) { m_playbackCb = cb; }
@@ -51,6 +61,7 @@ private:
     FFDecoder m_decoder;
     std::deque<std::shared_ptr<AudioPlaybackFrame>> m_playbackFrames;
 
+    PlaybackMode m_playbackMode;
     AudioPlayback_cb m_playbackCb;
 };
 

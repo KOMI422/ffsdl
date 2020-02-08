@@ -3,6 +3,7 @@
 MediaFileStream::MediaFileStream()
 {
     m_pFlvFile = NULL;
+    m_readSpeedCtrl.updateBitRate(500 * 1000);
 }
 
 MediaFileStream::~MediaFileStream()
@@ -25,17 +26,23 @@ bool MediaFileStream::openFile(const std::string& path)
     return true;
 }
 
-bool MediaFileStream::readFrame(std::string& frameData, std::string& frameHeader, 
+int32_t MediaFileStream::readFrame(std::string& frameData, std::string& frameHeader, 
         uint32_t& dts, uint32_t& pts, FrameType& type)
 {
-    checkLoadFile();
-
-    if(m_cacheFlvTags.empty())
-        return false;
+    if(!m_readSpeedCtrl.isEndOfFile)
+    {
+        checkLoadFile();
+    }
 
     while(true)
     {
+        if (m_cacheFlvTags.empty())
+            return m_readSpeedCtrl.isEndOfFile ? -1 : 0;
+
         std::shared_ptr<FlvTag> pTag = m_cacheFlvTags.front();
+        if(m_outSpeedCtrl.isUnderControl(pTag->getTagTimeStamp()))
+            return 0;
+
         m_cacheFlvTags.pop_front();
 
         if(pTag->isVideoTag())
@@ -75,17 +82,35 @@ bool MediaFileStream::readFrame(std::string& frameData, std::string& frameHeader
                 break;
             }
         }
+        else if(pTag->isScriptDataTag())
+        {
+            std::shared_ptr<ScriptDataTag> pDTag = 
+                std::dynamic_pointer_cast<ScriptDataTag>(pTag);
+
+            uint32_t videoKBitRate = atoi(pDTag->getPropertyValue("videodatarate", "500").c_str());
+            uint32_t audioKBitRate = atoi(pDTag->getPropertyValue("audiodatarate", "100").c_str());
+            std::cout << "MetaData: videoKbps=" << videoKBitRate << " audioKbps=" << audioKBitRate << std::endl;
+
+            uint32_t fileBitRate = (videoKBitRate + audioKBitRate) * 1000;
+            fileBitRate = (fileBitRate == 0) ? 500000 : fileBitRate;
+            m_readSpeedCtrl.updateBitRate(fileBitRate * 1.5);
+            continue;
+        }
     }
 
-    return true;
+    return 1;
 }
 
-void MediaFileStream::checkLoadFile()
+int32_t MediaFileStream::checkLoadFile()
 {
-    if(!m_cacheFlvTags.empty())
-        return;
+    // if(!m_cacheFlvTags.empty())
+    //     return;
+    uint32_t readSize = m_readSpeedCtrl.calcReadSize(m_cacheFlvTags);
+    if(readSize == 0)
+        return 0;
 
-    int nRead = fread(m_readBuffer, 1, sizeof(m_readBuffer), m_pFlvFile);
+    // std::cout << "CheckLoadFile now=" << SDL_GetTicks() << " size=" << readSize << std::endl;
+    int nRead = fread(m_readBuffer, 1, readSize, m_pFlvFile);
     if(nRead > 0)
     {
         std::vector<std::shared_ptr<FlvTag>> tagVec;
@@ -93,4 +118,7 @@ void MediaFileStream::checkLoadFile()
 
         m_cacheFlvTags.insert(m_cacheFlvTags.end(), tagVec.begin(), tagVec.end());
     }
+
+    m_readSpeedCtrl.isEndOfFile = (nRead < readSize) ? feof(m_pFlvFile) : false;
+    return m_readSpeedCtrl.isEndOfFile ? -1 : nRead;
 }

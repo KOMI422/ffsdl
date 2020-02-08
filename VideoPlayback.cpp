@@ -1,8 +1,9 @@
 #include "VideoPlayback.h"
 
-VideoPlayback::VideoPlayback()
-{
+const uint32_t VideoPlayback::TICK_FLUSH = UINT32_MAX;
 
+VideoPlayback::VideoPlayback() : m_playbackMode(TICK_MODE)
+{
 }
 
 bool VideoPlayback::setupPlayback(const VideoPlaybackConfig& cfg)
@@ -39,7 +40,32 @@ void VideoPlayback::appendContent(const VideoPlaybackPacket& content)
         // std::cout << "AppendContent appendPpts=" << pkt.pts
         //     << " decodedPts=" << pFrame->pts << std::endl;
         m_playbackFrames.push_back(pPlayFrame);
+        
+        if(m_playbackMode == FLUSH_MODE)
+            tickTrigger(TICK_FLUSH);
     }
+}
+
+void VideoPlayback::flushContent()
+{
+    std::vector<FFDecodeFrame> frames;
+    m_decoder.flushDecoder(frames);
+
+    for(FFDecodeFrame& frame : frames)
+    {
+        std::shared_ptr<VideoPlaybackFrame> pPlayFrame = 
+            std::make_shared<VideoPlaybackFrame>();
+        
+        pPlayFrame->pts = frame.pts;
+        pPlayFrame->width = frame.width;
+        pPlayFrame->height = frame.height;
+        pPlayFrame->yuvContent = frame.frameData;
+
+        m_playbackFrames.push_back(pPlayFrame);
+    }
+    
+    if(m_playbackMode == FLUSH_MODE)
+        tickTrigger(TICK_FLUSH);
 }
 
 void VideoPlayback::tickTrigger(uint32_t tickTime)
@@ -60,10 +86,18 @@ void VideoPlayback::tickTrigger(uint32_t tickTime)
     // }
 
     std::vector<std::shared_ptr<VideoPlaybackFrame>> playFrames;
-    if(!m_playbackFrames.empty() && m_playbackFrames.front()->pts <= tickTime)
+    if(tickTime == VideoPlayback::TICK_FLUSH)
     {
-        playFrames.push_back(m_playbackFrames.front());
-        m_playbackFrames.pop_front();
+        playFrames.insert(playFrames.end(), m_playbackFrames.begin(), m_playbackFrames.end());
+        m_playbackFrames.clear();
+    }
+    else
+    {
+        if (!m_playbackFrames.empty() && m_playbackFrames.front()->pts <= tickTime)
+        {
+            playFrames.push_back(m_playbackFrames.front());
+            m_playbackFrames.pop_front();
+        }
     }
 
     if(!playFrames.empty())

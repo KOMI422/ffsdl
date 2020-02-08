@@ -1,5 +1,7 @@
 #include "AudioPlayback.h"
 
+const uint32_t AudioPlayback::TICK_FLUSH = UINT32_MAX;
+
 AudioPlayback::AudioPlayback()
 {
 }
@@ -36,7 +38,32 @@ void AudioPlayback::appendContent(const AudioPlaybackPacket& content)
         pPlayFrame->channels = frame.channels;
 
         m_playbackFrames.push_back(pPlayFrame);
+
+        if(m_playbackMode == FLUSH_MODE)
+            tickTrigger(TICK_FLUSH);
     }
+}
+
+void AudioPlayback::flushContent()
+{
+    std::vector<FFDecodeFrame> frames;
+    m_decoder.flushDecoder(frames);
+
+    for(FFDecodeFrame& frame : frames)
+    {
+        std::shared_ptr<AudioPlaybackFrame> pPlayFrame = 
+            std::make_shared<AudioPlaybackFrame>();
+
+        pPlayFrame->pts = frame.pts;
+        pPlayFrame->pcmContent = frame.frameData;
+        pPlayFrame->sampleRate = frame.sampleRate;
+        pPlayFrame->channels = frame.channels;
+
+        m_playbackFrames.push_back(pPlayFrame);
+    }
+
+    if(m_playbackMode == FLUSH_MODE)
+        tickTrigger(TICK_FLUSH);
 }
 
 void AudioPlayback::tickTrigger(uint32_t tickTime)
@@ -47,8 +74,11 @@ void AudioPlayback::tickTrigger(uint32_t tickTime)
         std::shared_ptr<AudioPlaybackFrame> pFrame = m_playbackFrames.front();
         if(pFrame->pts <= tickTime)
         {
-            //音频帧有固定的播放时长，不像视频能快放，超过播放时间的音频帧只能丢弃
-            playFrames.clear();
+            if(m_playbackMode == TICK_MODE)
+            {
+                //音频帧有固定的播放时长，不像视频能快放，超过播放时间的音频帧只能丢弃
+                playFrames.clear();
+            }
             playFrames.push_back(pFrame);
             m_playbackFrames.pop_front();
         }
@@ -60,6 +90,12 @@ void AudioPlayback::tickTrigger(uint32_t tickTime)
 
     if(!playFrames.empty())
     {
+        // std::shared_ptr<AudioPlaybackFrame> pFrame = playFrames[0];
+        // uint32_t diff = tickTime - pFrame->pts;
+        // if (diff > 0)
+        // {
+        //     std::cout << "diff=" << diff << std::endl;
+        // }
         notifyPlaybackFrames(playFrames);
     }
 }

@@ -37,12 +37,22 @@ typedef std::function<void(const std::vector<std::shared_ptr<VideoPlaybackFrame>
 class VideoPlayback
 {
 public:
+    static const uint32_t TICK_FLUSH;
+
+    enum PlaybackMode
+    {
+        TICK_MODE = 0,
+        FLUSH_MODE = 1
+    };
+public:
     VideoPlayback();
 
+    void setPlaybackMode(PlaybackMode mode) { m_playbackMode = mode; }
     bool setupPlayback(const VideoPlaybackConfig& cfg);
     void resetPlayback();
 
     void appendContent(const VideoPlaybackPacket& content);
+    void flushContent();
     void tickTrigger(uint32_t tickTime);
 
     void setPlaybackCallback(VideoPlayback_cb cb) { m_playbackCb = cb; }
@@ -50,6 +60,7 @@ public:
 private:
     void notifyPlaybackFrames(const std::vector<std::shared_ptr<VideoPlaybackFrame>>& playFrames);
 private:
+    PlaybackMode m_playbackMode;
     FFDecoder m_decoder;
     std::deque<std::shared_ptr<VideoPlaybackFrame>> m_playbackFrames;
     

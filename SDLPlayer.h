@@ -6,31 +6,11 @@
 #include "MediaFileStream.h"
 #include "MediaPlayer.h"
 
-class AudioThread
-{
-public:
-    static int threadEntry(void* ptr);
-public:
-    AudioThread();
-
-    void start();
-    void stop();
-
-    void handleAudio(const std::string& pcmData, uint32_t sampleRate, uint32_t channels);
-private:
-    void run();
-private:
-    SDL_Thread* m_pThread;
-    SDL_atomic_t m_running;
-
-    SDL_AudioDeviceID m_audioDevId;
-    SDL_AudioSpec m_audioSpec;
-};
-
 class SDLPlayer
 {
 public:
     static int threadEntry(void* ptr);
+    static uint32_t onTimer(uint32_t interval, void* ptr);
     static uint32_t SDLPlayer_EventType;
 
     enum SDLPlayer_EventCode
@@ -47,7 +27,7 @@ public:
     void renderVideo();
     void tickTrigger(uint64_t millisecond) { m_mediaPlayer.tickTrigger(millisecond); }
 private:
-    void run();
+    bool run();
     void videoPlaybackCb(const std::vector<std::shared_ptr<VideoPlaybackFrame>>& frameVec);
     void audioPlaybackCb(const std::vector<std::shared_ptr<AudioPlaybackFrame>>& frameVec);
 private:
@@ -62,7 +42,9 @@ private:
 
     MediaFileStream m_flvStream;
     MediaPlayer m_mediaPlayer;
+    bool m_isFlvStreamEnd;
 
+    SDL_TimerID m_timer;
     SDL_Thread* m_pThread;
     SDL_atomic_t m_running;
     std::string m_videoHeader;
