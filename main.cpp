@@ -40,7 +40,7 @@ int main(int argc, char* argv[])
             }
             else
             {
-                // pPlayer->tickTrigger(SDL_GetTicks());
+                // pPlayer->renderVideo();
             }
         }
         else
@@ -49,6 +49,10 @@ int main(int argc, char* argv[])
             {
                 running = false;
                 continue;
+            }
+            else if(evt.type == SDL_WINDOWEVENT && evt.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
+            {
+                pPlayer->onWndSizeChangedEvt(evt.window.data1, evt.window.data2);
             }
             else if (evt.type == SDLPlayer::SDLPlayer_EventType)
             {

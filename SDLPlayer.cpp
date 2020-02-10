@@ -1,15 +1,18 @@
 #include "SDLPlayer.h"
 #include <cstring>
 
-int SDLPlayer::threadEntry(void *ptr)
-{
-    ((SDLPlayer*)ptr)->run();
-    return 0;
-}
-
 uint32_t SDLPlayer::onTimer(uint32_t interval, void* ptr)
 {
-    return ((SDLPlayer*)ptr)->run() ? interval : 0;
+    if(((SDLPlayer*)ptr)->run())
+    {
+        return interval;
+    }
+    else
+    {
+        ((SDLPlayer*)ptr)->m_timerWaitCond.signal();
+        return 0;
+    }
+    
 }
 
 uint32_t SDLPlayer::SDLPlayer_EventType = 0;
@@ -20,13 +23,19 @@ SDLPlayer::SDLPlayer(uint32_t w, uint32_t h, bool autoScale)
     m_pPlayerWnd = NULL;
     m_pPlayerRenderer = NULL;
     m_pPlayerTexture = NULL;
-    m_pThread = NULL;
+    m_wndWidth = w;
+    m_wndHeight = h;
+    m_wndRenderRect.x = 0;
+    m_wndRenderRect.y = 0;
+    m_wndRenderRect.w = w;
+    m_wndRenderRect.h = h;
 
     m_pPlayerWnd = SDL_CreateWindow(
         "SDLPlayer",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         w, h, 0
     );
+    SDL_SetWindowResizable(m_pPlayerWnd, SDL_TRUE);
 
     m_pPlayerRenderer = SDL_CreateRenderer(
         m_pPlayerWnd, -1, 0
@@ -70,9 +79,6 @@ SDLPlayer::~SDLPlayer()
 
 void SDLPlayer::startPlay(const std::string& url)
 {
-    if(m_pThread)
-        return;
-    
     m_isFlvStreamEnd = false;
     m_flvStream.openFile(url);
     VideoPlayback_cb cb = std::bind(&SDLPlayer::videoPlaybackCb, this, std::placeholders::_1);
@@ -91,9 +97,9 @@ void SDLPlayer::stopPlay()
     //     return;
 
     SDL_AtomicSet(&m_running, 0);
-    SDL_RemoveTimer(m_timer);
 
-    SDL_Delay(500);
+    m_timerWaitCond.wait();
+    SDL_RemoveTimer(m_timer);
 }
 
 bool SDLPlayer::run()
@@ -177,6 +183,7 @@ void SDLPlayer::renderVideo()
             m_pPlayerTexture = SDL_CreateTexture(
                 m_pPlayerRenderer, SDL_PIXELFORMAT_IYUV,
                 SDL_TEXTUREACCESS_STREAMING, pFrame->width, pFrame->height);
+            recalcWndRenderRect();
         }
 
         SDL_LockTexture(m_pPlayerTexture, NULL, &pixels, &pitch);
@@ -185,9 +192,45 @@ void SDLPlayer::renderVideo()
         SDL_UnlockTexture(m_pPlayerTexture);
 
         SDL_RenderClear(m_pPlayerRenderer);
-        SDL_RenderCopy(m_pPlayerRenderer, m_pPlayerTexture, NULL, NULL);
+        SDL_RenderCopy(m_pPlayerRenderer, m_pPlayerTexture, NULL, &m_wndRenderRect);
         SDL_RenderPresent(m_pPlayerRenderer);
     }
+}
+
+void SDLPlayer::onWndSizeChangedEvt(uint32_t w, uint32_t h)
+{
+    m_wndWidth = w;
+    m_wndHeight = h;
+
+    recalcWndRenderRect();
+}
+
+void SDLPlayer::recalcWndRenderRect()
+{
+    if(m_pPlayerTexture == NULL)
+    {
+        m_wndRenderRect.x = 0;
+        m_wndRenderRect.y = 0;
+        m_wndRenderRect.w = m_wndWidth;
+        m_wndRenderRect.h = m_wndHeight;
+    }
+    else
+    {
+        int32_t textureW = 0;
+        int32_t textureH = 0;
+        SDL_QueryTexture(m_pPlayerTexture, NULL, NULL, &textureW, &textureH);
+
+        double wRatio = (textureW * 1.0) / m_wndWidth;
+        double hRatio = (textureH * 1.0) / m_wndHeight;
+
+        double scaleRatio = (wRatio > hRatio) ? wRatio : hRatio;
+        m_wndRenderRect.w = (uint32_t)(textureW / scaleRatio);
+        m_wndRenderRect.h = (uint32_t)(textureH / scaleRatio);
+
+        m_wndRenderRect.x = (m_wndWidth - m_wndRenderRect.w) / 2;
+        m_wndRenderRect.y = (m_wndHeight - m_wndRenderRect.h) / 2;
+    }
+    
 }
 
 void SDLPlayer::videoPlaybackCb(const std::vector<std::shared_ptr<VideoPlaybackFrame>>& frameVec)
