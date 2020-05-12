@@ -94,6 +94,7 @@ int32_t MediaFileStream::readFrame(std::string& frameData, std::string& frameHea
             uint32_t fileBitRate = (videoKBitRate + audioKBitRate) * 1000;
             fileBitRate = (fileBitRate == 0) ? 500000 : fileBitRate;
             m_readSpeedCtrl.updateBitRate(fileBitRate * 1.5);
+            // m_readSpeedCtrl.updateBitRate(15 * 1000 * 1000);
             continue;
         }
     }
@@ -109,7 +110,7 @@ int32_t MediaFileStream::checkLoadFile()
     if(readSize == 0)
         return 0;
 
-    // std::cout << "CheckLoadFile now=" << SDL_GetTicks() << " size=" << readSize << std::endl;
+    // std::cout << "CheckLoadFile size=" << readSize << std::endl;
     int nRead = fread(m_readBuffer, 1, readSize, m_pFlvFile);
     if(nRead > 0)
     {

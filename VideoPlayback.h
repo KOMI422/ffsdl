@@ -6,6 +6,7 @@
 #include <memory>
 #include <deque>
 #include <vector>
+#include <ostream>
 
 struct VideoPlaybackPacket
 {
@@ -59,6 +60,7 @@ public:
     const std::shared_ptr<VideoPlaybackFrame> getHeadPlaybackFrame() const;
 private:
     void notifyPlaybackFrames(const std::vector<std::shared_ptr<VideoPlaybackFrame>>& playFrames);
+    std::ostream& getDecoderLogFunc();
 private:
     PlaybackMode m_playbackMode;
     FFDecoder m_decoder;

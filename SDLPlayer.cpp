@@ -30,6 +30,10 @@ SDLPlayer::SDLPlayer(uint32_t w, uint32_t h, bool autoScale)
     m_wndRenderRect.w = w;
     m_wndRenderRect.h = h;
 
+    m_timeLineTime = 0;
+    m_timeLineBastTs = 0;
+    SDL_AtomicSet(&m_isPlaying, 1);
+
     m_pPlayerWnd = SDL_CreateWindow(
         "SDLPlayer",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -173,9 +177,6 @@ void SDLPlayer::renderVideo()
 
     for(std::shared_ptr<VideoPlaybackFrame> pFrame : toRenderFrames)
     {
-        void* pixels = NULL;
-        int pitch = 0;
-
         // SDL_Log("Render Frame pts=%u size=%u", pFrame->pts, toRenderFrames.size());
 
         if(m_pPlayerTexture == NULL)
@@ -186,14 +187,9 @@ void SDLPlayer::renderVideo()
             recalcWndRenderRect();
         }
 
-        SDL_LockTexture(m_pPlayerTexture, NULL, &pixels, &pitch);
-        memcpy(pixels, (const void*)pFrame->yuvContent.data(), pFrame->yuvContent.size());
-        pitch = pFrame->width;
-        SDL_UnlockTexture(m_pPlayerTexture);
+        m_curRenderFrame = pFrame;
 
-        SDL_RenderClear(m_pPlayerRenderer);
-        SDL_RenderCopy(m_pPlayerRenderer, m_pPlayerTexture, NULL, &m_wndRenderRect);
-        SDL_RenderPresent(m_pPlayerRenderer);
+        renderFrame(pFrame);
     }
 }
 
@@ -203,6 +199,12 @@ void SDLPlayer::onWndSizeChangedEvt(uint32_t w, uint32_t h)
     m_wndHeight = h;
 
     recalcWndRenderRect();
+    renderFrame(m_curRenderFrame);
+}
+
+void SDLPlayer::onKeyPressed()
+{
+    
 }
 
 void SDLPlayer::recalcWndRenderRect()
@@ -231,6 +233,21 @@ void SDLPlayer::recalcWndRenderRect()
         m_wndRenderRect.y = (m_wndHeight - m_wndRenderRect.h) / 2;
     }
     
+}
+
+void SDLPlayer::renderFrame(std::shared_ptr<VideoPlaybackFrame> pFrame)
+{
+    void *pixels = NULL;
+    int pitch = 0;
+
+    SDL_LockTexture(m_pPlayerTexture, NULL, &pixels, &pitch);
+    memcpy(pixels, (const void *)pFrame->yuvContent.data(), pFrame->yuvContent.size());
+    pitch = pFrame->width;
+    SDL_UnlockTexture(m_pPlayerTexture);
+
+    SDL_RenderClear(m_pPlayerRenderer);
+    SDL_RenderCopy(m_pPlayerRenderer, m_pPlayerTexture, NULL, &m_wndRenderRect);
+    SDL_RenderPresent(m_pPlayerRenderer);
 }
 
 void SDLPlayer::videoPlaybackCb(const std::vector<std::shared_ptr<VideoPlaybackFrame>>& frameVec)

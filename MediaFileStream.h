@@ -40,7 +40,6 @@ private:
         uint32_t fileBitRate;
         uint32_t bufferSize;
         char* pBuffer;
-        std::chrono::steady_clock::time_point lastReadTs;
 
         ReadSpeedControl()
         {
@@ -48,7 +47,6 @@ private:
             fileBitRate = 0;
             bufferSize = 0;
             pBuffer = NULL;
-            lastReadTs = std::chrono::steady_clock::now();
         }
 
         void updateBitRate(uint32_t br)
@@ -75,18 +73,13 @@ private:
             {
                 cacheBufLen = cacheTags.back()->getTagTimeStamp() - cacheTags.front()->getTagTimeStamp();
             }
-            
-            std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
-            std::chrono::milliseconds interval = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastReadTs);
 
             if(cacheBufLen >= 1000)
             {
-                lastReadTs = now;
                 return 0;
             }
 
             uint32_t readSize = bufferSize;// * interval.count() / 1000;
-            lastReadTs = now;
 
             return readSize;
         }
@@ -119,6 +112,13 @@ private:
             std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
             std::chrono::milliseconds clockInterval = std::chrono::duration_cast<std::chrono::milliseconds>(now - baseClockTs);
             uint32_t tagInterval = curTagTs - baseTagTs;
+
+            if(tagInterval > clockInterval.count() + 30 * 1000 && clockInterval.count() >= 1000)
+            {
+                //时间戳跳跃
+                baseTagTs = curTagTs;
+                return false;
+            }
 
             bool underControl = false;
             if(tagInterval > clockInterval.count() && (tagInterval - clockInterval.count()) >= 1000)

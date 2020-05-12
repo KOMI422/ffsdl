@@ -4,6 +4,8 @@ const uint32_t VideoPlayback::TICK_FLUSH = UINT32_MAX;
 
 VideoPlayback::VideoPlayback() : m_playbackMode(TICK_MODE)
 {
+    FFDecoder::LogFunc logFunc = std::bind(&VideoPlayback::getDecoderLogFunc, this);
+    m_decoder.setLogFunction(logFunc);
 }
 
 bool VideoPlayback::setupPlayback(const VideoPlaybackConfig& cfg)
@@ -123,4 +125,9 @@ void VideoPlayback::notifyPlaybackFrames(
     {
         m_playbackCb(playFrames);
     }
+}
+
+std::ostream& VideoPlayback::getDecoderLogFunc()
+{
+    return std::cout;
 }

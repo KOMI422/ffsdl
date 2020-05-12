@@ -1,4 +1,5 @@
 #include "MediaPlayer.h"
+#include <iostream>
 
 void VideoPlaybackThread::threadEntry(VideoPlaybackThread* pPlayback)
 {
@@ -56,7 +57,6 @@ void VideoPlaybackThread::appendPacket(const VideoPlaybackPacket& pkt)
     PlaybackPacket pbPkt;
     pbPkt.pktType = PlaybackPacket::PLAYBACK_PACKET;
     pbPkt.playbackPkt = pkt;
-
     m_pktQueue.pushBack(pbPkt);
 }
 

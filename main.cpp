@@ -54,6 +54,10 @@ int main(int argc, char* argv[])
             {
                 pPlayer->onWndSizeChangedEvt(evt.window.data1, evt.window.data2);
             }
+            else if(evt.type == SDL_KEYUP)
+            {
+                pPlayer->onKeyPressed();
+            }
             else if (evt.type == SDLPlayer::SDLPlayer_EventType)
             {
                 SDLPlayer *player = (SDLPlayer *)evt.user.data1;

@@ -24,20 +24,22 @@ public:
     void stopPlay();
 
     void renderVideo();
-    void tickTrigger(uint64_t millisecond) { m_mediaPlayer.tickTrigger(millisecond); }
 
     void onWndSizeChangedEvt(uint32_t w, uint32_t h);
+    void onKeyPressed();
 private:
     bool run();
     void videoPlaybackCb(const std::vector<std::shared_ptr<VideoPlaybackFrame>>& frameVec);
     void audioPlaybackCb(const std::vector<std::shared_ptr<AudioPlaybackFrame>>& frameVec);
     void recalcWndRenderRect();
+    void renderFrame(std::shared_ptr<VideoPlaybackFrame> pFrame);
 private:
     SDL_Window* m_pPlayerWnd;
     SDL_Renderer* m_pPlayerRenderer;
     SDL_Texture* m_pPlayerTexture;
     SDL_mutex* m_pRenderFrameMutex;
     std::vector<std::shared_ptr<VideoPlaybackFrame>> m_renderFrames;
+    std::shared_ptr<VideoPlaybackFrame> m_curRenderFrame;
     uint32_t m_wndWidth;
     uint32_t m_wndHeight;
     SDL_Rect m_wndRenderRect;
@@ -88,6 +90,10 @@ private:
     VideoPlayContext_Ptr m_videoPlayback;
     std::string m_audioHeader;
     AudioPlayContext_Ptr m_audioPlayback;
+
+    uint64_t m_timeLineTime;
+    uint64_t m_timeLineBastTs;
+    SDL_atomic_t m_isPlaying;
 };
 
 #endif
